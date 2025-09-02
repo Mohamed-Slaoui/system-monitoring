@@ -1,0 +1,16 @@
+version: "3.9"
+
+services:
+  frontend:
+    build: ./frontend
+    container_name: react-frontend
+    ports:
+      - "5173:80"   # Expose frontend on VM port 5173 → container's Nginx port 80
+    restart: always
+
+  backend:
+    build: ./backend
+    container_name: node-backend
+    ports:
+      - "3000:3000" # API available on VM port 3000
+    restart: always

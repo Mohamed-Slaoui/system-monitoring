@@ -44,7 +44,7 @@ ChartJS.register(
     Filler
 );
 
-const API_BASE = "http://localhost:3000/api";
+const API_BASE = "/api";
 
 export default function SystemMonitor() {
     const [cpuUsage, setCpuUsage] = useState(0);

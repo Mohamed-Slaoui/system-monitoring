@@ -1,88 +1,55 @@
 pipeline {
     agent any
 
-    environment {
-        FRONTEND_IMAGE = "system-monitor-frontend:${env.BUILD_ID}"
-        BACKEND_IMAGE = "system-monitor-backend:${env.BUILD_ID}"
-        FRONTEND_CONTAINER = "system-monitor-frontend"
-        BACKEND_CONTAINER = "system-monitor-backend"
-    }
-
     stages {
-        stage('Build Frontend') {
+        stage('Clean Workspace') {
             steps {
-                dir('frontend') {
-                    sh "docker build -t ${FRONTEND_IMAGE} ."
-                }
+                cleanWs()
             }
         }
 
-        stage('Build Backend') {
+        stage('Stop Existing Containers') {
             steps {
-                dir('backend') {
-                    sh "docker build -t ${BACKEND_IMAGE} ."
-                }
-            }
-        }
-
-        stage('Stop Old Containers') {
-            steps {
-                sh """
-                # Stop and remove frontend if exists
-                if [ \$(docker ps -a -q -f name=${FRONTEND_CONTAINER}) ]; then
-                    docker stop ${FRONTEND_CONTAINER}
-                    docker rm ${FRONTEND_CONTAINER}
-                fi
+                sh '''
+                # Stop and remove any containers from this project
+                docker-compose down || true
                 
-                # Stop and remove backend if exists
-                if [ \$(docker ps -a -q -f name=${BACKEND_CONTAINER}) ]; then
-                    docker stop ${BACKEND_CONTAINER}
-                    docker rm ${BACKEND_CONTAINER}
-                fi
-                """
+                # Ensure ports are free by removing any conflicting containers
+                docker stop system-monitor-backend system-monitor-frontend || true
+                docker rm system-monitor-backend system-monitor-frontend || true
+                '''
             }
         }
 
-        stage('Run Backend Container') {
+        stage('Build and Deploy with Docker Compose') {
             steps {
-                sh """
-                docker run -d \\
-                  -p 3000:3000 \\
-                  --name ${BACKEND_CONTAINER} \\
-                  --restart unless-stopped \\
-                  ${BACKEND_IMAGE}
-                """
-            }
-        }
-
-        stage('Run Frontend Container') {
-            steps {
-                sh """
-                docker run -d \\
-                  -p 3001:80 \\
-                  --name ${FRONTEND_CONTAINER} \\
-                  --restart unless-stopped \\
-                  ${FRONTEND_IMAGE}
-                """
-            }
-        }
-
-        stage('Verify Deployment') {
-            steps {
-                sh """
-                # Wait for containers to start
-                sleep 10
+                sh '''
+                # Build and start all services
+                docker-compose up -d --build
                 
-                # Test backend
-                echo "Testing backend..."
+                # Wait for services to start
+                sleep 15
+                
+                # Verify backend is running
+                echo "Testing backend API..."
                 curl -f http://localhost:3000/api/cpu || exit 1
                 
-                # Test frontend
+                # Verify frontend is running
                 echo "Testing frontend..."
                 curl -f http://localhost:3001 || exit 1
                 
-                echo "Deployment successful! ✅"
-                """
+                echo "✅ Deployment successful!"
+                '''
+            }
+        }
+
+        stage('Health Check') {
+            steps {
+                sh '''
+                # Double check everything is running
+                docker-compose ps
+                docker-compose logs --tail=10
+                '''
             }
         }
     }
@@ -94,11 +61,14 @@ pipeline {
         }
         success {
             echo "Build ${env.BUILD_ID} succeeded! 🎉"
-            // You can add notifications here: slack, email, etc.
+            sh '''
+            echo "Frontend: http://localhost:3001"
+            echo "Backend API: http://localhost:3000/api/cpu"
+            '''
         }
         failure {
             echo "Build ${env.BUILD_ID} failed! ❌"
-            // You can add failure notifications here
+            sh 'docker-compose logs || true'
         }
     }
 }

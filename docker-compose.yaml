@@ -21,8 +21,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
-    volumes:
-      - /:/host:ro
+    
     privileged: true
     networks:
       - app-network

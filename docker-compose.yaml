@@ -2,13 +2,16 @@ version: '3.8'
 
 services:
   frontend:
-    build: ./frontend
+    build: 
+      context: ./frontend
+      args:
+        - VITE_API_BASE=/api
     ports:
       - "3001:80"
-    environment:
-      - VITE_API_BASE=/api
     networks:
       - app-network
+    depends_on:
+      - backend
     restart: unless-stopped
 
   backend:
@@ -19,7 +22,7 @@ services:
       - NODE_ENV=production
       - PORT=3000
     volumes:
-      - /:/host:ro  # Read-only access to host system for systeminformation
+      - /:/host:ro
     privileged: true
     networks:
       - app-network
@@ -28,3 +31,4 @@ services:
 networks:
   app-network:
     driver: bridge
+    name: app-network

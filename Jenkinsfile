@@ -12,77 +12,98 @@ pipeline {
         stage('Clean Existing Containers') {
             steps {
                 sh '''
-                # Stop and remove any existing containers
-                echo "Cleaning up any existing containers..."
+                echo "=== Cleaning up existing containers ==="
                 docker stop ${FRONTEND_CONTAINER} ${BACKEND_CONTAINER} || true
                 docker rm ${FRONTEND_CONTAINER} ${BACKEND_CONTAINER} || true
-                
-                # Additional cleanup for any orphaned containers
-                docker ps -a --filter "name=system-monitor" --format "{{.ID}}" | xargs -r docker stop || true
-                docker ps -a --filter "name=system-monitor" --format "{{.ID}}" | xargs -r docker rm || true
                 '''
             }
         }
 
-        stage('Build Frontend Image') {
+        stage('Build Images') {
             steps {
                 sh """
-                echo "Building frontend image..."
-                cd frontend
+                echo "=== Building backend image ==="
+                cd backend
+                docker build -t ${BACKEND_IMAGE} .
+                
+                echo "=== Building frontend image ==="
+                cd ../frontend
                 docker build -t ${FRONTEND_IMAGE} .
                 """
             }
         }
 
-        stage('Build Backend Image') {
+        stage('Run Backend with Debug') {
             steps {
                 sh """
-                echo "Building backend image..."
-                cd backend
-                docker build -t ${BACKEND_IMAGE} .
-                """
-            }
-        }
-
-        stage('Run Backend Container') {
-            steps {
-                sh """
-                echo "Starting backend container..."
+                echo "=== Starting backend container ==="
+                # Run in foreground first to see any immediate errors
                 docker run -d \\
                   -p 3000:3000 \\
                   --name ${BACKEND_CONTAINER} \\
-                  --restart unless-stopped \\
                   ${BACKEND_IMAGE}
+                
+                echo "Waiting a moment for backend to start..."
+                sleep 10
+                
+                # Check if container is running
+                echo "Container status:"
+                docker ps -a --filter "name=${BACKEND_CONTAINER}"
+                
+                # Check logs for errors
+                echo "Backend logs:"
+                docker logs ${BACKEND_CONTAINER} || true
+                
+                # Check if port is listening
+                echo "Port check:"
+                netstat -tuln | grep :3000 || echo "Port 3000 not listening"
                 """
             }
         }
 
-        stage('Run Frontend Container') {
+        stage('Verify Backend') {
             steps {
                 sh """
-                echo "Starting frontend container..."
+                echo "=== Testing backend ==="
+                # Try to connect to backend
+                if curl -f http://localhost:3000/api/cpu; then
+                    echo "✅ Backend is working!"
+                else
+                    echo "❌ Backend failed - checking details..."
+                    docker logs ${BACKEND_CONTAINER}
+                    exit 1
+                fi
+                """
+            }
+        }
+
+        stage('Run Frontend') {
+            steps {
+                sh """
+                echo "=== Starting frontend container ==="
                 docker run -d \\
                   -p 3001:80 \\
                   --name ${FRONTEND_CONTAINER} \\
-                  --restart unless-stopped \\
                   ${FRONTEND_IMAGE}
+                
+                sleep 5
+                echo "Frontend container status:"
+                docker ps -a --filter "name=${FRONTEND_CONTAINER}"
                 """
             }
         }
 
-        stage('Verify Deployment') {
+        stage('Final Verification') {
             steps {
                 sh """
-                echo "Waiting for services to start..."
-                sleep 20
-                
-                echo "Testing backend API..."
-                curl --retry 5 --retry-delay 5 --max-time 10 -f http://localhost:3000/api/cpu
+                echo "=== Final verification ==="
+                echo "Testing backend..."
+                curl -f http://localhost:3000/api/cpu
                 
                 echo "Testing frontend..."
-                curl --retry 3 --retry-delay 3 --max-time 10 -f http://localhost:3001
+                curl -f http://localhost:3001
                 
-                echo "✅ Deployment successful! All services are running."
+                echo "✅ All services are running successfully!"
                 """
             }
         }
@@ -90,33 +111,26 @@ pipeline {
 
     post {
         always {
+            sh '''
+            echo "=== Final container status ==="
+            docker ps -a
+            '''
             cleanWs()
         }
-        success {
-            echo "Build ${env.BUILD_ID} succeeded! 🎉"
-            sh '''
-            echo "=== Deployment Summary ==="
-            echo "Frontend: http://localhost:3001"
-            echo "Backend API: http://localhost:3000/api/cpu"
-            docker ps --filter "name=system-monitor" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
-            '''
-        }
         failure {
-            echo "Build ${env.BUILD_ID} failed! ❌"
             sh '''
-            echo "=== Debug Information ==="
-            echo "Running containers:"
+            echo "=== FAILURE DEBUG INFO ==="
+            echo "All containers:"
             docker ps -a
             echo ""
-            echo "Port 3000 status:"
-            netstat -tuln | grep :3000 || echo "Port 3000 not listening"
+            echo "Backend logs:"
+            docker logs ${BACKEND_CONTAINER} || true
             echo ""
-            echo "Port 3001 status:"
-            netstat -tuln | grep :3001 || echo "Port 3001 not listening"
+            echo "Frontend logs:"
+            docker logs ${FRONTEND_CONTAINER} || true
             echo ""
-            echo "Container logs (if any):"
-            docker logs ${BACKEND_CONTAINER} || echo "No backend logs"
-            docker logs ${FRONTEND_CONTAINER} || echo "No frontend logs"
+            echo "Network status:"
+            netstat -tuln | grep -E "(3000|3001)" || true
             '''
         }
     }

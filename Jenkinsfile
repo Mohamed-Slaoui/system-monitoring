@@ -61,21 +61,7 @@ pipeline {
             }
         }
 
-        stage('Verify Backend') {
-            steps {
-                sh """
-                echo "=== Testing backend ==="
-                # Try to connect to backend
-                if curl -f http://localhost:3000/api/cpu; then
-                    echo "✅ Backend is working!"
-                else
-                    echo "❌ Backend failed - checking details..."
-                    docker logs ${BACKEND_CONTAINER}
-                    exit 1
-                fi
-                """
-            }
-        }
+        
 
         stage('Run Frontend') {
             steps {

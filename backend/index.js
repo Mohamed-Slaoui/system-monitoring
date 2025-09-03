@@ -203,6 +203,7 @@ app.get("/api/alerts", async (req, res) => {
 // Start server
 const PORT = 3000;
 
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`✅ Backend running on http://0.0.0.0:${PORT}`);
+app.listen(PORT, () => {
+  console.log(`✅ Backend running on http://localhost:${PORT}`);
+  console.log(`📊 API endpoints: /api/cpu, /api/memory, /api/disk, /api/network, /api/system, /api/processes, /api/alerts`);
 });

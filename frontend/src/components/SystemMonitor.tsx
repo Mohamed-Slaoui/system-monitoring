@@ -44,7 +44,7 @@ ChartJS.register(
     Filler
 );
 
-const API_BASE = "/api";
+const API_BASE = import.meta.env.VITE_API_BASE;
 
 export default function SystemMonitor() {
     const [cpuUsage, setCpuUsage] = useState(0);

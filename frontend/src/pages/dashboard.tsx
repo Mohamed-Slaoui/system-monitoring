@@ -29,7 +29,7 @@ const Dashboard = () => {
                 <div className="container mx-auto px-6 py-4">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                            <Monitor className="h-8 w-8 text-accent" />
+                            <Monitor className="h-8 w-8 text-black" />
                             <h1 className="text-2xl font-bold text-foreground">System Monitor</h1>
                         </div>
                         <div className="flex items-center gap-4">

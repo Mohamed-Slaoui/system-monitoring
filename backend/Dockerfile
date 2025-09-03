@@ -1,15 +1,20 @@
-FROM node:20-alpine
+FROM node:18-alpine
 
 WORKDIR /app
 
+# Copy package files
 COPY package*.json ./
+
+# Install dependencies
 RUN npm ci --only=production
 
+# Copy source code
 COPY . .
 
-# Create non-root user
-RUN addgroup -S app && adduser -S app -G app
-USER app
-
 EXPOSE 3000
-CMD ["npm", "start"]
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD node healthcheck.js
+
+CMD ["node", "index.js"]

@@ -1,16 +1,30 @@
-version: "3.8"
+version: '3.8'
 
 services:
-  backend:
-    build: ./backend
-    container_name: backend-container
-    ports:
-      - "3000:3000"   # expose backend on host:3000
-    restart: always
-
   frontend:
     build: ./frontend
-    container_name: frontend-container
     ports:
-      - "8081:80"     # expose frontend on host:8081
-    restart: always
+      - "3001:80"
+    environment:
+      - VITE_API_BASE=/api
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    volumes:
+      - /:/host:ro  # Read-only access to host system for systeminformation
+    privileged: true
+    networks:
+      - app-network
+    restart: unless-stopped
+
+networks:
+  app-network:
+    driver: bridge

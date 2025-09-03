@@ -1,16 +1,16 @@
-version: "3.9"
+version: "3.8"
 
 services:
   backend:
     build: ./backend
     container_name: backend-container
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
 
   frontend:
     build: ./frontend
     container_name: frontend-container
-    ports:
-      - "80:80"
+    expose:
+      - "80"
     depends_on:
       - backend

@@ -1,81 +1,104 @@
 pipeline {
     agent any
-    
+
     environment {
-        DOCKER_REGISTRY = 'localhost:5000' // Change if using a registry
-        FRONTEND_IMAGE = "${DOCKER_REGISTRY}/system-monitor-frontend:${env.BUILD_ID}"
-        BACKEND_IMAGE = "${DOCKER_REGISTRY}/system-monitor-backend:${env.BUILD_ID}"
+        FRONTEND_IMAGE = "system-monitor-frontend:${env.BUILD_ID}"
+        BACKEND_IMAGE = "system-monitor-backend:${env.BUILD_ID}"
+        FRONTEND_CONTAINER = "system-monitor-frontend"
+        BACKEND_CONTAINER = "system-monitor-backend"
     }
-    
+
     stages {
         stage('Build Frontend') {
             steps {
                 dir('frontend') {
-                    script {
-                        docker.build("${FRONTEND_IMAGE}", "--build-arg VITE_API_BASE=/api .")
-                    }
+                    sh "docker build -t ${FRONTEND_IMAGE} ."
                 }
             }
         }
-        
+
         stage('Build Backend') {
             steps {
                 dir('backend') {
-                    script {
-                        docker.build("${BACKEND_IMAGE}", ".")
-                    }
+                    sh "docker build -t ${BACKEND_IMAGE} ."
                 }
             }
         }
-        
-        stage('Test Applications') {
+
+        stage('Stop Old Containers') {
             steps {
-                // Add your test commands here
-                echo 'Running tests...'
-                // sh 'npm test' // Uncomment if you have tests
+                sh """
+                # Stop and remove frontend if exists
+                if [ \$(docker ps -a -q -f name=${FRONTEND_CONTAINER}) ]; then
+                    docker stop ${FRONTEND_CONTAINER}
+                    docker rm ${FRONTEND_CONTAINER}
+                fi
+                
+                # Stop and remove backend if exists
+                if [ \$(docker ps -a -q -f name=${BACKEND_CONTAINER}) ]; then
+                    docker stop ${BACKEND_CONTAINER}
+                    docker rm ${BACKEND_CONTAINER}
+                fi
+                """
             }
         }
-        
-        stage('Push Images') {
+
+        stage('Run Backend Container') {
             steps {
-                script {
-                    docker.push("${FRONTEND_IMAGE}")
-                    docker.push("${BACKEND_IMAGE}")
-                }
+                sh """
+                docker run -d \\
+                  -p 3000:3000 \\
+                  --name ${BACKEND_CONTAINER} \\
+                  --restart unless-stopped \\
+                  ${BACKEND_IMAGE}
+                """
             }
         }
-        
-        stage('Deploy to Production') {
+
+        stage('Run Frontend Container') {
             steps {
-                script {
-                    // Stop and remove old containers
-                    sh 'docker-compose down || true'
-                    
-                    // Pull latest images
-                    sh "docker pull ${FRONTEND_IMAGE}"
-                    sh "docker pull ${BACKEND_IMAGE}"
-                    
-                    // Update docker-compose with new images
-                    sh "sed -i 's|image:.*frontend.*|image: ${FRONTEND_IMAGE}|' docker-compose.yml"
-                    sh "sed -i 's|image:.*backend.*|image: ${BACKEND_IMAGE}|' docker-compose.yml"
-                    
-                    // Start new containers
-                    sh 'docker-compose up -d'
-                }
+                sh """
+                docker run -d \\
+                  -p 3001:80 \\
+                  --name ${FRONTEND_CONTAINER} \\
+                  --restart unless-stopped \\
+                  ${FRONTEND_IMAGE}
+                """
+            }
+        }
+
+        stage('Verify Deployment') {
+            steps {
+                sh """
+                # Wait for containers to start
+                sleep 10
+                
+                # Test backend
+                echo "Testing backend..."
+                curl -f http://localhost:3000/api/cpu || exit 1
+                
+                # Test frontend
+                echo "Testing frontend..."
+                curl -f http://localhost:3001 || exit 1
+                
+                echo "Deployment successful! ✅"
+                """
             }
         }
     }
-    
+
     post {
         always {
-            // Clean up workspace
+            echo "Pipeline execution completed"
             cleanWs()
         }
         success {
-            slackSend(message: "Build ${env.BUILD_ID} succeeded! 🎉")
+            echo "Build ${env.BUILD_ID} succeeded! 🎉"
+            // You can add notifications here: slack, email, etc.
         }
         failure {
-            slackSend(message: "Build ${env.BUILD_ID} failed! 😞")
+            echo "Build ${env.BUILD_ID} failed! ❌"
+            // You can add failure notifications here
         }
     }
 }

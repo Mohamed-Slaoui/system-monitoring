@@ -1,5 +1,5 @@
-# Build stage
-FROM node:18-alpine AS build
+# Build stage - Use Node.js 22
+FROM node:22-alpine AS build
 
 WORKDIR /app
 

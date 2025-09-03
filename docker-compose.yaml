@@ -2,10 +2,7 @@ version: '3.8'
 
 services:
   frontend:
-    build: 
-      context: ./frontend
-      args:
-        - VITE_API_BASE=/api
+    build: ./frontend
     ports:
       - "3001:80"
     networks:
@@ -18,11 +15,6 @@ services:
     build: ./backend
     ports:
       - "3000:3000"
-    environment:
-      - NODE_ENV=production
-      - PORT=3000
-    
-    privileged: true
     networks:
       - app-network
     restart: unless-stopped
@@ -30,4 +22,7 @@ services:
 networks:
   app-network:
     driver: bridge
-    name: app-network
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+          gateway: 172.20.0.1

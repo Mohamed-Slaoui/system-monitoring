@@ -44,7 +44,12 @@ ChartJS.register(
     Filler
 );
 
-const API_BASE = import.meta.env.VITE_API_BASE;
+const API_BASE = window.location.hostname === 'localhost' 
+  ? 'http://localhost:3000/api' 
+  : '/api';
+
+  console.log(API_BASE);
+  
 
 export default function SystemMonitor() {
     const [cpuUsage, setCpuUsage] = useState(0);

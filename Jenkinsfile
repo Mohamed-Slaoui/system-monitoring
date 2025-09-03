@@ -6,16 +6,23 @@ pipeline {
         BACKEND_IMAGE = "system-monitor-backend:${env.BUILD_ID}"
         FRONTEND_CONTAINER = "system-monitor-frontend"
         BACKEND_CONTAINER = "system-monitor-backend"
+        NETWORK_NAME = "app-network"
     }
 
     stages {
+        stage('Create Network') {
+            steps {
+                sh """
+                docker network create ${NETWORK_NAME} || true
+                """
+            }
+        }
+
         stage('Clean Existing Containers') {
             steps {
                 sh '''
-                echo "🔄 Stopping and removing old containers..."
                 docker stop ${FRONTEND_CONTAINER} ${BACKEND_CONTAINER} || true
                 docker rm ${FRONTEND_CONTAINER} ${BACKEND_CONTAINER} || true
-                echo "✅ Cleanup completed"
                 '''
             }
         }
@@ -23,32 +30,31 @@ pipeline {
         stage('Build Images') {
             steps {
                 sh """
-                echo "🏗️ Building backend image..."
-                cd backend
-                docker build -t ${BACKEND_IMAGE} .
-                
-                echo "🏗️ Building frontend image..."
-                cd ../frontend
-                docker build -t ${FRONTEND_IMAGE} .
+                cd backend && docker build -t ${BACKEND_IMAGE} .
+                cd ../frontend && docker build -t ${FRONTEND_IMAGE} .
                 """
             }
         }
 
-        stage('Run Containers') {
+        stage('Run Backend') {
             steps {
                 sh """
-                echo "🚀 Starting backend container..."
                 docker run -d \\
                   -p 3000:3000 \\
                   --name ${BACKEND_CONTAINER} \\
-                  --restart unless-stopped \\
+                  --network ${NETWORK_NAME} \\
                   ${BACKEND_IMAGE}
+                """
+            }
+        }
 
-                echo "🚀 Starting frontend container..."
+        stage('Run Frontend') {
+            steps {
+                sh """
                 docker run -d \\
                   -p 3001:80 \\
                   --name ${FRONTEND_CONTAINER} \\
-                  --restart unless-stopped \\
+                  --network ${NETWORK_NAME} \\
                   ${FRONTEND_IMAGE}
                 """
             }
@@ -57,36 +63,12 @@ pipeline {
         stage('Verify Deployment') {
             steps {
                 sh """
-                echo "🔍 Testing deployment..."
-                sleep 15
-                
-                echo "Testing backend API..."
-                curl -f http://localhost:3000/api/cpu && echo "✅ Backend working!"
-                
-                echo "Testing frontend..."
-                curl -f http://localhost:3001 && echo "✅ Frontend working!"
-                
-                echo "🎉 Deployment successful! All systems operational."
+                sleep 10
+                curl -f http://localhost:3000/api/cpu
+                curl -f http://localhost:3001
+                echo "✅ All services working!"
                 """
             }
-        }
-    }
-
-    post {
-        always {
-            cleanWs()
-        }
-        success {
-            echo "✅ Build ${env.BUILD_ID} succeeded! GitHub push → Auto-deployment complete! 🚀"
-        }
-        failure {
-            echo "❌ Build ${env.BUILD_ID} failed! Check logs above."
-            sh '''
-            echo "📋 Debug info:"
-            docker ps -a
-            docker logs ${BACKEND_CONTAINER} || true
-            docker logs ${FRONTEND_CONTAINER} || true
-            '''
         }
     }
 }

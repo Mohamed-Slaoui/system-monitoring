@@ -1,28 +1,21 @@
 version: '3.8'
-
 services:
   frontend:
     build: ./frontend
+    image: system-monitoring-frontend:latest
     ports:
-      - "3001:80"
+      - "80:80"
     networks:
-      - app-network
+      - monitoring-net
     depends_on:
       - backend
-    restart: unless-stopped
-
   backend:
     build: ./backend
+    image: system-monitoring-backend:latest
     ports:
       - "3000:3000"
     networks:
-      - app-network
-    restart: unless-stopped
-
+      - monitoring-net
 networks:
-  app-network:
-    driver: bridge
-    ipam:
-      config:
-        - subnet: "172.19.0.0/16"
-          gateway: "172.19.0.1"
+  monitoring-net:
+    external: true

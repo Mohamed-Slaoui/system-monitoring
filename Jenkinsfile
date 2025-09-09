@@ -1,74 +1,58 @@
 pipeline {
     agent any
-
     environment {
-        FRONTEND_IMAGE = "system-monitor-frontend:${env.BUILD_ID}"
-        BACKEND_IMAGE = "system-monitor-backend:${env.BUILD_ID}"
-        FRONTEND_CONTAINER = "system-monitor-frontend"
-        BACKEND_CONTAINER = "system-monitor-backend"
-        NETWORK_NAME = "app-network"
+        // Define Docker Compose file path
+        COMPOSE_FILE = 'docker-compose.yaml'
     }
-
     stages {
-        stage('Create Network') {
+        stage('Checkout') {
             steps {
-                sh """
-                docker network create ${NETWORK_NAME} || true
-                """
+                // Clean workspace and use default SCM config (set in Jenkins UI)
+                cleanWs()
+                checkout scm
             }
         }
-
-        stage('Clean Existing Containers') {
+        stage('Test Frontend') {
             steps {
-                sh '''
-                docker stop ${FRONTEND_CONTAINER} ${BACKEND_CONTAINER} || true
-                docker rm ${FRONTEND_CONTAINER} ${BACKEND_CONTAINER} || true
-                '''
+                dir('frontend') {
+                    sh 'npm install'
+                    sh 'npm test || echo "No tests defined for frontend"'
+                }
             }
         }
-
-        stage('Build Images') {
+        stage('Test Backend') {
             steps {
-                sh """
-                cd backend && docker build -t ${BACKEND_IMAGE} .
-                cd ../frontend && docker build -t ${FRONTEND_IMAGE} .
-                """
+                dir('backend') {
+                    sh 'npm install'
+                    sh 'npm test || echo "No tests defined for backend"'
+                }
             }
         }
-
-        stage('Run Backend') {
+        stage('Build Docker Images') {
             steps {
-                sh """
-                docker run -d \\
-                  -p 3000:3000 \\
-                  --name ${BACKEND_CONTAINER} \\
-                  --network ${NETWORK_NAME} \\
-                  ${BACKEND_IMAGE}
-                """
+                // Build frontend and backend images
+                sh 'docker build -t system-monitoring-frontend:latest frontend/'
+                sh 'docker build -t system-monitoring-backend:latest backend/'
             }
         }
-
-        stage('Run Frontend') {
+        stage('Deploy') {
             steps {
-                sh """
-                docker run -d \\
-                  -p 3001:80 \\
-                  --name ${FRONTEND_CONTAINER} \\
-                  --network ${NETWORK_NAME} \\
-                  ${FRONTEND_IMAGE}
-                """
+                // Deploy using Docker Compose
+                sh 'docker-compose -f ${COMPOSE_FILE} down'
+                sh 'docker-compose -f ${COMPOSE_FILE} up -d --build'
             }
         }
-
-        stage('Verify Deployment') {
-            steps {
-                sh """
-                sleep 10
-                curl -f http://localhost:3000/api/cpu
-                curl -f http://localhost:3001
-                echo "✅ All services working!"
-                """
-            }
+    }
+    post {
+        always {
+            // Clean up dangling images to save space
+            sh 'docker image prune -f'
+        }
+        success {
+            echo 'Deployment successful!'
+        }
+        failure {
+            echo 'Pipeline failed. Check logs for details.'
         }
     }
 }

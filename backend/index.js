@@ -143,16 +143,25 @@ app.get("/api/system", async (req, res) => {
 // Top processes
 app.get("/api/processes", async (req, res) => {
   try {
-    const processes = await si.processes();
-    const list = Array.isArray(processes?.list) ? processes.list : [];
+    // First snapshot
+    const first = await si.processes();
+    // Wait 1 second
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    // Second snapshot
+    const second = await si.processes();
 
-    const top5 = list
-      .sort((a, b) => (b.cpu || 0) - (a.cpu || 0))
-      .slice(0, 5)
-      .map(p => ({
-        name: p.name || p.command || "Unknown",
-        cpu: toFixedNumber(p.cpu, 1), // number
-      }));
+    const usageList = second.list.map(proc2 => {
+      const proc1 = first.list.find(p => p.pid === proc2.pid);
+      const cpuDiff = proc1 ? proc2.cpu - proc1.cpu : proc2.cpu;
+      return {
+        name: proc2.name || proc2.command || "Unknown",
+        cpu: toFixedNumber(cpuDiff, 1),
+      };
+    });
+
+    const top5 = usageList
+      .sort((a, b) => b.cpu - a.cpu)
+      .slice(0, 5);
 
     res.json(top5);
   } catch (error) {

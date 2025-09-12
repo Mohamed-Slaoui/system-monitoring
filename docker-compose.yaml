@@ -4,11 +4,13 @@ services:
     build: ./frontend
     image: system-monitoring-frontend:latest
     ports:
-      - "80:80"
+      - "3001:80"  # Changed from 80:80 to 3001:80
     networks:
       - monitoring-net
     depends_on:
       - backend
+    restart: unless-stopped
+
   backend:
     build: ./backend
     image: system-monitoring-backend:latest
@@ -16,6 +18,8 @@ services:
       - "3000:3000"
     networks:
       - monitoring-net
+    restart: unless-stopped
+
 networks:
   monitoring-net:
     external: true

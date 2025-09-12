@@ -20,6 +20,13 @@ services:
       - monitoring-net
     restart: unless-stopped
 
+    #--------------- 
+    pid: "host"  # Share host's process namespace
+    privileged: true  # Grant elevated privileges
+    volumes:
+      - /:/rootfs:ro  # Mount host root filesystem read-only
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
 networks:
   monitoring-net:
     external: true

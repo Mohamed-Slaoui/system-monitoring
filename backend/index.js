@@ -145,17 +145,30 @@ app.get("/api/processes", async (req, res) => {
   try {
     // First snapshot
     const first = await si.processes();
+    const firstTime = Date.now();
+
     // Wait 1 second
     await new Promise(resolve => setTimeout(resolve, 1000));
+
     // Second snapshot
     const second = await si.processes();
+    const secondTime = Date.now();
+    const elapsedSec = (secondTime - firstTime) / 1000;
 
+    // Number of logical CPU cores
+    const cpuCount = (await si.cpu()).cores || 1;
+
+    // Compute per-process usage %
     const usageList = second.list.map(proc2 => {
       const proc1 = first.list.find(p => p.pid === proc2.pid);
-      const cpuDiff = proc1 ? proc2.cpu - proc1.cpu : proc2.cpu;
+      const cpuDiff = proc1 ? proc2.utime - proc1.utime + (proc2.stime - proc1.stime) : 0;
+
+      // CPU% = (diff in jiffies / elapsed time) / #cores * 100
+      const cpuPercent = (cpuDiff / (elapsedSec * cpuCount * 1000)) * 100;
+
       return {
         name: proc2.name || proc2.command || "Unknown",
-        cpu: toFixedNumber(cpuDiff, 1),
+        cpu: toFixedNumber(cpuPercent, 1),
       };
     });
 

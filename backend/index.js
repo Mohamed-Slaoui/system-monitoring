@@ -141,79 +141,24 @@ app.get("/api/system", async (req, res) => {
 });
 
 // Top processes
-// Top processes - Fixed for Docker/host compatibility
 app.get("/api/processes", async (req, res) => {
   try {
-    const options = {};
-
-    // Use host procfs if mounted
-    if (process.env.PROCFS_PATH) {
-      options.procfs = process.env.PROCFS_PATH;
-    }
-
-    // First snapshot
-    const first = await si.processes(options);
-    const firstTime = Date.now();
-
-    // Wait for a meaningful time interval (increased from 1s to 3s)
-    await new Promise(resolve => setTimeout(resolve, 3000));
-
-    // Second snapshot
-    const second = await si.processes(options);
-    const secondTime = Date.now();
-    const elapsedSec = (secondTime - firstTime) / 1000;
-
-    // Get CPU info including clock ticks per second
-    const cpuInfo = await si.cpu();
-    const cpuCount = cpuInfo.cores || 1;
-    const clockTickPerSecond = cpuInfo.clock || 100; // Fallback to typical value
-
-    // Compute per-process usage %
-    const usageList = second.list.map(proc2 => {
-      const proc1 = first.list.find(p => p.pid === proc2.pid);
-
-      if (!proc1) {
-        return {
-          name: proc2.name || proc2.command || "Unknown",
-          cpu: 0,
-          pid: proc2.pid
-        };
-      }
-
-      // Calculate CPU time difference in jiffies
-      const utimeDiff = proc2.utime - proc1.utime;
-      const stimeDiff = proc2.stime - proc1.stime;
-      const totalDiff = utimeDiff + stimeDiff;
-
-      // Convert jiffies to seconds and calculate percentage
-      const cpuTimeSeconds = totalDiff / clockTickPerSecond;
-      const cpuPercent = (cpuTimeSeconds / elapsedSec / cpuCount) * 100;
-
-      return {
-        name: proc2.name || proc2.command || "Unknown",
-        cpu: toFixedNumber(cpuPercent, 1),
-        pid: proc2.pid
-      };
-    });
-
-    const top5 = usageList
-      .filter(proc => proc.cpu > 0) // Filter out 0% processes
-      .sort((a, b) => b.cpu - a.cpu)
-      .slice(0, 5);
-
-    // If no processes show usage, return a meaningful message
-    if (top5.length === 0) {
-      top5.push({
-        name: "No CPU activity detected",
-        cpu: 0,
-        pid: "N/A"
-      });
-    }
-
-    res.json(top5);
+    const processes = await si.processes();
+    const topProcesses = processes.list
+      .slice(0, 5)
+      .map(proc => ({
+        name: proc.name || proc.command || 'Unknown',
+        cpu: toFixedNumber(proc.cpu || 0, 1),
+        pid: proc.pid,
+        memory: toFixedNumber(proc.mem || 0, 1)
+      }));
+    
+    res.json(topProcesses);
   } catch (error) {
-    console.error("Processes error:", error);
-    res.status(500).json({ error: "Failed to get processes data" });
+    console.error('Processes error:', error);
+    res.json([
+      { name: 'Monitoring temporarily unavailable', cpu: 0, pid: 'N/A', memory: 0 }
+    ]);
   }
 });
 
